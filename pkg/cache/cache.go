@@ -2,13 +2,12 @@ package cach
 
 import (
 	"github.com/Asqar95/cache.git/internal"
-	"time"
 )
 
-func main() {
-	Cache().Set("2", "userid")
+func Version() string {
+	return internal.Version
 }
 
-func Cache() *internal.Cache {
-	return internal.New(time.Second * 2)
+func New() *internal.Cache {
+	return internal.New()
 }
