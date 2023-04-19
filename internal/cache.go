@@ -1,73 +1,72 @@
 package internal
 
 import (
-	"errors"
 	"sync"
 	"time"
 )
 
-type Item struct {
-	Value      interface{}
-	Created    time.Time
-	Expiration int64
-}
-
 type Cache struct {
-	sync.RWMutex
-	defaultExpiration time.Duration
-	cleanupInterval   time.Duration
-	items             map[string]Item
+	locker  *sync.RWMutex
+	storage map[string]cacheItem
 }
 
-func New(defaultExpiration time.Duration) *Cache {
-	items := make(map[string]Item)
-
-	cache := Cache{
-		items:             items,
-		defaultExpiration: defaultExpiration,
-		cleanupInterval:   cleanupInterval,
+func (c *Cache) Set(key string, value any, ttl time.Duration) error {
+	if err := validateKey(key); err != nil {
+		return err
 	}
 
-	if cleanupInterval > 0 {
-		cache.StartGC()
+	if err := validateValue(value); err != nil {
+		return err
 	}
 
-	return &cache
+	if err := validateItemLifeTime(ttl); err != nil {
+		return err
+	}
+
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
+	c.storage[key] = cacheItem{
+		value:       value,
+		whenExpired: getExpiration(ttl),
+	}
+
+	return nil
 }
 
-func (c *Cache) Set(key string, value interface{}) {
-	c.Lock()
-
-	defer c.Unlock()
-
-	c.items[key] = Item{
-		Value: value,
+func (c *Cache) Get(key string) (any, error) {
+	if err := validateKey(key); err != nil {
+		return nil, err
 	}
-}
 
-func (c *Cache) Get(key string) (interface{}, bool) {
-	c.RLock()
-
-	defer c.RUnlock()
-
-	item, found := c.items[key]
+	c.locker.RLock()
+	item, found := c.storage[key]
+	c.locker.RUnlock()
 
 	if !found {
-		return nil, false
+		return nil, getKeyNotFoundError(key)
 	}
-	return item.Value, true
+
+	if isExpired(item) {
+		return nil, getItemExpiredError(key)
+	}
+
+	return item.value, nil
 }
 
 func (c *Cache) Delete(key string) error {
-	c.Lock()
-
-	defer c.Unlock()
-
-	if _, found := c.items[key]; !found {
-		return errors.New("key not found")
+	if err := validateKey(key); err != nil {
+		return err
 	}
 
-	delete(c.items, key)
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
+	if _, found := c.storage[key]; !found {
+		return getKeyNotFoundError(key)
+	}
+
+	delete(c.storage, key)
 
 	return nil
 }
