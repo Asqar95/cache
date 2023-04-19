@@ -19,7 +19,7 @@ type Cache struct {
 	items             map[string]Item
 }
 
-func New(defaultExpiration, cleanupInterval time.Duration) *Cache {
+func New(defaultExpiration time.Duration) *Cache {
 	items := make(map[string]Item)
 
 	cache := Cache{
